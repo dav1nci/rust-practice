@@ -1,0 +1,9 @@
+[package]
+name = "lab1"
+version = "0.1.0"
+authors = ["Dima Stolpakov <dimskii123@yandex.ua>"]
+
+[dependencies]
+conrod = {git = "https://github.com/PistonDevelopers/conrod/"}
+piston_window = { version = "0.52"}
+find_folder = "0.3.0"
