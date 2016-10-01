@@ -1,9 +1,7 @@
 #[macro_use]extern crate conrod;
 extern crate piston_window;
 extern crate find_folder;
-
-//use conrod::*;
-//use piston_window::*;
+use std::io;
 
 widget_ids! {
     struct Ids {
@@ -11,18 +9,108 @@ widget_ids! {
         login_field,
         password_field,
         ok_button,
+        change_pass_btn,
+        user_list,
+        add_new_user,
+        
     }
 }
 
+struct Person {
+    name: String,
+    password: String,
+    blocked: bool,
+    limit: bool,
+}
+
+impl Person {
+    fn new() -> Self {
+        Person {
+            name: "".to_string(),
+            password: "".to_string(),
+            blocked: true,
+            limit: false,
+        }
+    }
+
+    fn name(mut self, name: String) -> Self {
+        self.name = name;
+        self
+    }
+
+    fn password(mut self, password: String) -> Self {
+        self.password = password;
+        self
+    }
+
+    fn is_blocked(mut self, is_blocked: bool) -> Self {
+        self.blocked = is_blocked;
+        self
+    }
+
+    fn is_limit(mut self, is_limit: bool) -> Self {
+        self.limit = is_limit;
+        self
+    }
+}
+
+fn get_persons_from_file() -> Result<Vec<Person>, io::Error> {
+    use std::io::prelude::*;
+    use std::io::BufReader;
+    use std::fs::File;
+    use std::str::FromStr;
+    let mut f = try!(File::open("resource/userlist.txt"));
+    let mut persons = Vec::new();
+
+    let f = BufReader::new(f);
+    for line in f.lines() {
+        let line = line.unwrap();
+        let mut words: Vec<&str> = line.split_whitespace().collect();
+        if words.len() == 2 {
+            // If this is an ADMIN
+            let temp: Person = Person::new()
+                .name(words[0].to_string())
+                .password(words[1].to_string());
+            persons.push(temp);
+        } else {
+            let temp: Person = Person::new()
+                .name(words[0].to_string())
+                .password(words[1].to_string())
+                .is_blocked(FromStr::from_str(words[2]).unwrap())
+                .is_limit(FromStr::from_str(words[3]).unwrap());
+            persons.push(temp);
+        }
+
+        for word in &words {
+            print!("word one of <{}> words = <{}>, ", words.len(), word);
+        }
+        println!("");
+    }
+    Ok(persons)
+}
 
 fn main() {
     const HEIGHT: u32 = 480;
     const WIDTH: u32 = 720;
 
+    if let Ok(persons) = get_persons_from_file() {
+        println!("No error while getting vector");
+        println!("user1 values: {}, {}, {}, {}", persons[1].name, persons[1].password, persons[1].blocked, persons[1].limit);
+    }
+
+
+    //match read_from_file(lines) {
+    //    Ok(lines) => {
+    //        println!("OK!");
+    //        for line in lines {
+    //            println!("{}", line.unwrap());
+    //        }
+    //    },
+    //    Err(e) => println!("ERR!"),
+    //}
 
     use conrod::{widget, Labelable, Positionable, Sizeable, Widget};
     use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
-
 
     // Change this to OpenGL::V2_1 if not working.
     let opengl = OpenGL::V3_2;
@@ -68,7 +156,7 @@ fn main() {
 
         event.update(|_| {
             let ui = &mut ui.set_widgets(); // UiCell
-            set_widg(ui, &mut ids, &mut count, login, password);
+            login_panel(ui, &mut ids, &mut count, login, password);
         });
 
         // Draw our Ui!
@@ -96,7 +184,27 @@ fn main() {
 }
 
 
-fn set_widg(ui: &mut conrod::UiCell, ids: &mut Ids, count: &mut u32, login: &mut String, password: &mut String){
+fn admin_panel(ui: &mut conrod::UiCell, ids: &mut Ids, count: &mut u32, login: &mut String, password: &mut String) {
+    use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
+    use conrod::{color, widget, Colorable, Borderable, Labelable, Positionable, Sizeable, Widget};
+    use conrod::widget::{Canvas, Line};
+    // Draw `Change pass button` button
+    for event in widget::Button::new()
+        .middle_of(ids.canvas)
+            .w_h(80.0, 40.0)
+            .label("Sign In")
+            .rgb(0.4, 0.4, 0.2)
+            .set(ids.ok_button, ui) {
+                println!("Button pressed!");
+
+            }
+}
+
+fn user_panel() {
+
+}
+
+fn login_panel(ui: &mut conrod::UiCell, ids: &mut Ids, count: &mut u32, login: &mut String, password: &mut String) {
     use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
     use conrod::{color, widget, Colorable, Borderable, Labelable, Positionable, Sizeable, Widget};
     use conrod::widget::{Canvas, Line};
@@ -113,50 +221,50 @@ fn set_widg(ui: &mut conrod::UiCell, ids: &mut Ids, count: &mut u32, login: &mut
     for event in widget::TextBox::new(login)
         //.and_if(true, |text| text.xy([1.0, 1.0]))
         .mid_top_of(ids.canvas)
-        .font_size(20)
-        .w_h(320.0, 40.0)
-        .border(3.0)
-        .border_rgb(0.85, 0.43, 0.57)
-        .rgb(0.8, 0.75, 0.77)
-        .set(ids.login_field, ui) {
-            match event {
-                widget::text_box::Event::Enter => println!("TextBox : {:?}", login),
-                widget::text_box::Event::Update(string) => {
-                    println!("login update <{}>", string);
-                    *login = string;
-                },
-        }
-    }
+            .font_size(20)
+            .w_h(320.0, 40.0)
+            .border(3.0)
+            .border_rgb(0.85, 0.43, 0.57)
+            .rgb(0.8, 0.75, 0.77)
+            .set(ids.login_field, ui) {
+                match event {
+                    widget::text_box::Event::Enter => println!("TextBox : {:?}", login),
+                    widget::text_box::Event::Update(string) => {
+                        println!("login update <{}>", string);
+                        *login = string;
+                    },
+                }
+            }
 
     // Draw password field
     for event in widget::TextBox::new(password)
         //.and_if(true, |text| text.xy([1.0, 1.0]))
         .down_from(ids.login_field, 20.0)
-        .font_size(20)
-        .w_h(320.0, 40.0)
-        .border(3.0)
-        .border_rgb(0.85, 0.43, 0.57)
-        .rgb(0.8, 0.75, 0.77)
-        .set(ids.password_field, ui) {
-            match event {
-                widget::text_box::Event::Enter => println!("TextBox : {:?}", password),
-                widget::text_box::Event::Update(string) => {
-                    println!("password update <{}>", string);
-                    *password = string;
-                },
-        }
-    }
+            .font_size(20)
+            .w_h(320.0, 40.0)
+            .border(3.0)
+            .border_rgb(0.85, 0.43, 0.57)
+            .rgb(0.8, 0.75, 0.77)
+            .set(ids.password_field, ui) {
+                match event {
+                    widget::text_box::Event::Enter => println!("TextBox : {:?}", password),
+                    widget::text_box::Event::Update(string) => {
+                        println!("password update <{}>", string);
+                        *password = string;
+                    },
+                }
+            }
 
     // Draw `Sign In` button
     for event in widget::Button::new()
         .middle_of(ids.canvas)
-        .w_h(80.0, 40.0)
-        .label("Sign In")
-        .rgb(0.4, 0.4, 0.2)
-        .set(ids.ok_button, ui) {
-            println!("Button pressed!");
-            *count += 1;
-        }
+            .w_h(80.0, 40.0)
+            .label("Sign In")
+            .rgb(0.4, 0.4, 0.2)
+            .set(ids.ok_button, ui) {
+                println!("Button pressed!");
+
+            }
 }
 
 
