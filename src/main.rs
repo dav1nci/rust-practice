@@ -12,7 +12,7 @@ widget_ids! {
         change_pass_btn,
         user_list,
         add_new_user,
-        
+        text_not_found,
     }
 }
 
@@ -93,10 +93,10 @@ fn main() {
     const HEIGHT: u32 = 480;
     const WIDTH: u32 = 720;
 
-    if let Ok(persons) = get_persons_from_file() {
-        println!("No error while getting vector");
-        println!("user1 values: {}, {}, {}, {}", persons[1].name, persons[1].password, persons[1].blocked, persons[1].limit);
-    }
+    let persons = match get_persons_from_file() {
+        Ok(persons) => persons,
+        Err(e) => panic!("Error when getting persons from file"),
+    };
 
 
     //match read_from_file(lines) {
@@ -142,11 +142,16 @@ fn main() {
     // The image map describing each of our widget->image mappings (in our case, none).
     let image_map = conrod::image::Map::new();
 
+
+    // Variables, needed in draw <*_panel>'s functions to change state 
     let mut count = 0;
-
-
     let ref mut login = "".to_string();
     let password = &mut "".to_string();
+    let is_incorrect: &mut bool = &mut false;
+    let is_login_pressed: &mut bool = &mut false;
+    let mut err_msg = "".to_string();
+    let mut incorrect_attempts_counter: u32 = 2;
+
 
     while let Some(event) = window.next() {
         // Convert the piston event to conrod event
@@ -156,7 +161,7 @@ fn main() {
 
         event.update(|_| {
             let ui = &mut ui.set_widgets(); // UiCell
-            login_panel(ui, &mut ids, &mut count, login, password);
+            login_panel(ui, &mut ids, &mut count, login, password, is_incorrect, is_login_pressed, &err_msg);
         });
 
         // Draw our Ui!
@@ -180,6 +185,26 @@ fn main() {
                                                      texture_from_image);
             }
         });
+
+        if *is_login_pressed {
+            println!("Login pressed in main()");
+            println!("Login = <{}>, password = <{}>", *login, *password);
+            *is_login_pressed = false;
+            if *login.as_str() == persons[0].name {
+                if *password.as_str() == persons[0].password {
+                    println!("ADMIN ENTERED!");
+                } else {
+                    if incorrect_attempts_counter > 0 {
+                        *is_incorrect = true;
+                        err_msg = format!("Incorrect admin password, <{}> attempts left", incorrect_attempts_counter);
+                        incorrect_attempts_counter-=1;
+                    } else {
+                        err_msg = "3 times incorrect password, gg wp hacker".to_string();
+                        println!("{}", err_msg);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -204,68 +229,83 @@ fn user_panel() {
 
 }
 
-fn login_panel(ui: &mut conrod::UiCell, ids: &mut Ids, count: &mut u32, login: &mut String, password: &mut String) {
-    use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
-    use conrod::{color, widget, Colorable, Borderable, Labelable, Positionable, Sizeable, Widget};
-    use conrod::widget::{Canvas, Line};
+fn login_panel(ui: &mut conrod::UiCell, 
+               ids: &mut Ids, 
+               count: &mut u32, 
+               login: &mut String, 
+               password: &mut String,
+               is_incorrect: &mut bool, 
+               is_login_pressed: &mut bool,
+               err_msg: &String) {
+                   use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
+                   use conrod::{color, widget, Colorable, Borderable, Labelable, Positionable, Sizeable, Widget};
+                   use conrod::widget::{Canvas, Line};
 
 
-    Canvas::new()
-        .pad_top(150.0)
-        .rgb(1.0, 0.73, 1.0)
-        .set(ids.canvas, ui);
-    //Line::centred([-40.0, -40.0], [40.0, 40.0]).top_left_of(ids.canvas).set(ids.circle, ui);
+                   Canvas::new()
+                       .pad_top(150.0)
+                       .rgb(1.0, 0.73, 1.0)
+                       .set(ids.canvas, ui);
+                   //Line::centred([-40.0, -40.0], [40.0, 40.0]).top_left_of(ids.canvas).set(ids.circle, ui);
 
 
-    // Draw login filed
-    for event in widget::TextBox::new(login)
-        //.and_if(true, |text| text.xy([1.0, 1.0]))
-        .mid_top_of(ids.canvas)
-            .font_size(20)
-            .w_h(320.0, 40.0)
-            .border(3.0)
-            .border_rgb(0.85, 0.43, 0.57)
-            .rgb(0.8, 0.75, 0.77)
-            .set(ids.login_field, ui) {
-                match event {
-                    widget::text_box::Event::Enter => println!("TextBox : {:?}", login),
-                    widget::text_box::Event::Update(string) => {
-                        println!("login update <{}>", string);
-                        *login = string;
-                    },
-                }
-            }
+                   // Draw login filed
+                   for event in widget::TextBox::new(login)
+                       //.and_if(true, |text| text.xy([1.0, 1.0]))
+                       .mid_top_of(ids.canvas)
+                           .font_size(20)
+                           .w_h(320.0, 40.0)
+                           .border(3.0)
+                           .border_rgb(0.85, 0.43, 0.57)
+                           .rgb(0.8, 0.75, 0.77)
+                           .set(ids.login_field, ui) {
+                               match event {
+                                   widget::text_box::Event::Enter => println!("TextBox : {:?}", login),
+                                   widget::text_box::Event::Update(string) => {
+                                       println!("login update <{}>", string);
+                                       *login = string;
+                                   },
+                               }
+                           }
 
-    // Draw password field
-    for event in widget::TextBox::new(password)
-        //.and_if(true, |text| text.xy([1.0, 1.0]))
-        .down_from(ids.login_field, 20.0)
-            .font_size(20)
-            .w_h(320.0, 40.0)
-            .border(3.0)
-            .border_rgb(0.85, 0.43, 0.57)
-            .rgb(0.8, 0.75, 0.77)
-            .set(ids.password_field, ui) {
-                match event {
-                    widget::text_box::Event::Enter => println!("TextBox : {:?}", password),
-                    widget::text_box::Event::Update(string) => {
-                        println!("password update <{}>", string);
-                        *password = string;
-                    },
-                }
-            }
+                   // Draw password field
+                   for event in widget::TextBox::new(password)
+                       //.and_if(true, |text| text.xy([1.0, 1.0]))
+                       .down_from(ids.login_field, 20.0)
+                           .font_size(20)
+                           .w_h(320.0, 40.0)
+                           .border(3.0)
+                           .border_rgb(0.85, 0.43, 0.57)
+                           .rgb(0.8, 0.75, 0.77)
+                           .set(ids.password_field, ui) {
+                               match event {
+                                   widget::text_box::Event::Enter => println!("TextBox : {:?}", password),
+                                   widget::text_box::Event::Update(string) => {
+                                       println!("password update <{}>", string);
+                                       *password = string;
+                                   },
+                               }
+                           }
 
-    // Draw `Sign In` button
-    for event in widget::Button::new()
-        .middle_of(ids.canvas)
-            .w_h(80.0, 40.0)
-            .label("Sign In")
-            .rgb(0.4, 0.4, 0.2)
-            .set(ids.ok_button, ui) {
-                println!("Button pressed!");
+                   if *is_incorrect {
+                       widget::Text::new(err_msg)
+                           .color(color::LIGHT_RED)
+                           .padded_w_of(ids.password_field, 20.0)
+                           .align_text_left()
+                           .line_spacing(10.0)
+                           .set(ids.text_not_found, ui);
+                   }
 
-            }
-}
+                   // Draw `Sign In` button
+                   for event in widget::Button::new()
+                       .middle_of(ids.canvas)
+                           .w_h(80.0, 40.0)
+                           .label("Sign In")
+                           .rgb(0.4, 0.4, 0.2)
+                           .set(ids.ok_button, ui) {
+                               *is_login_pressed = true;
+                           }
+               }
 
 
 
