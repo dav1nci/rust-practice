@@ -362,7 +362,25 @@ fn admin_panel(ui: &mut conrod::UiCell,
                 .set(ids.change_status_text, ui); // don't care about id in this label
         },
         AdminPanelState::list_users => {
+            let (mut items, scrollbar) = widget::List::new(persons.len(), 50.0)
+                .scrollbar_on_top()
+                .middle_of(ids.right_col)
+                .wh_of(ids.right_col)
+                .set(ids.user_list, ui);
 
+            while let Some(item) = items.next(ui) {
+                let i = item.i;
+                let label = format!("{}. {} pass <{}> blocked:<{}> limit:<{}>", i, persons[i].name, persons[i].password, persons[i].blocked, persons[i].limit);
+                let toggle = widget::Toggle::new(persons[i].blocked)
+                    .label(&label)
+                    .label_color(conrod::color::WHITE)
+                    .color(conrod::color::LIGHT_BLUE);
+                for v in item.set(toggle, ui) {
+                    persons[i].blocked = v;
+                }
+            }
+
+            if let Some(s) = scrollbar { s.set(ui) }
         },
         AdminPanelState::add_new_user => {
 
