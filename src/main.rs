@@ -20,6 +20,7 @@ widget_ids! {
         change_btn,
         change_status_text,
         user_limit_list,
+        exit_btn,
     }
 }
 
@@ -144,7 +145,7 @@ fn main() {
 
     // Construct the window.
     let mut window: PistonWindow =
-        WindowSettings::new("Primitives Demo", [WIDTH, HEIGHT])
+        WindowSettings::new("SUPER GUI", [WIDTH, HEIGHT])
         .opengl(opengl)
         .exit_on_esc(true)
         .build()
@@ -171,7 +172,7 @@ fn main() {
 
 
     // Variables, needed in draw <login_panel>'s function to change state 
-    let mut state: State = State::admin_panel;
+    let mut state: State = State::login;
     let mut count = 0;
     let ref mut login = "".to_string();
     let password = &mut "".to_string();
@@ -187,6 +188,8 @@ fn main() {
     let change_status = &mut "".to_string();
     let mut new_user_name = "".to_string();
 
+    // Variables needed in draw <user_panel> 
+    let mut user_index: usize = 0;
 
     while let Some(event) = window.next() {
         // Convert the piston event to conrod event
@@ -198,8 +201,8 @@ fn main() {
             let ui = &mut ui.set_widgets(); // UiCell
             match state {
                 State::login => login_panel(ui, &mut ids, &mut count, login, password, is_incorrect, is_login_pressed, &err_msg),
-                State::admin_panel => admin_panel(ui, &mut ids, &mut count, &mut persons, admin_panel_state, old_password, new_password, change_status, &mut new_user_name),
-                _ => println!("Others"),
+                State::admin_panel => admin_panel(ui, &mut ids, &mut count, &mut persons, admin_panel_state, old_password, new_password, change_status, &mut new_user_name, &mut state),
+                State::user_panel => user_panel(ui, &mut ids, &mut persons, old_password, new_password, change_status, &mut state, user_index),
             }
 
         });
@@ -227,11 +230,10 @@ fn main() {
         });
 
         if *is_login_pressed {
-            println!("Login pressed in main()");
             println!("Login = <{}>, password = <{}>", *login, *password);
             *is_login_pressed = false;
-            if *login.as_str() == persons[0].name {
-                if *password.as_str() == persons[0].password {
+            if *login.as_str() == persons[0].name { // if login ADMIN
+                if *password.as_str() == persons[0].password { // If ADMIN's password correct
                     println!("ADMIN ENTERED!");
                     state = State::admin_panel;
                 } else {
@@ -240,8 +242,23 @@ fn main() {
                         err_msg = format!("Incorrect admin password, <{}> attempts left", incorrect_attempts_counter);
                         incorrect_attempts_counter-=1;
                     } else {
-                        err_msg = "3 times incorrect password, gg wp hacker".to_string();
+                        err_msg = "3 times incorrect password, gg wp, hacker".to_string();
                         println!("{}", err_msg);
+                    }
+                }
+            } else { // Check if it is user from userlist 
+                for i in 0..persons.len()  {
+                    if *login.as_str() == persons[i].name { // Login right, check the password
+                        if *password.as_str() == persons[i].password { // Password right, check is_block status
+                            if !persons[i].blocked { // User don't blocked
+                                println!("USER ENTERED!");
+                                state = State::user_panel;
+                                user_index = i;
+                            } else {
+                                println!("user <{}> blocked", persons[i].name);
+                                err_msg = format!("{} is blocked", persons[i].name);
+                            }
+                        }
                     }
                 }
             }
@@ -258,7 +275,8 @@ fn admin_panel(ui: &mut conrod::UiCell,
                old_password: &mut String,
                new_password: &mut String,
                change_status: &mut String,
-               new_user_name: &mut String) 
+               new_user_name: &mut String,
+               state: &mut State) 
 {
     use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
     use conrod::{color, widget, Colorable, Borderable, Labelable, Positionable, Sizeable, Widget};
@@ -298,6 +316,17 @@ fn admin_panel(ui: &mut conrod::UiCell,
             .rgb(0.4, 0.4, 0.2)
             .set(ids.add_new_user_btn, ui) {
                 *admin_panel_state = AdminPanelState::add_new_user;
+            }
+
+    // Add new user btn
+    for event in widget::Button::new()
+        .mid_bottom_of(ids.left_col)
+            .w_h(150.0, 40.0)
+            .label("Exit to Login Menu")
+            .rgb(0.4, 0.4, 0.2)
+            .set(ids.exit_btn, ui) {
+                *admin_panel_state = AdminPanelState::none;
+                *state = State::login;
             }
 
     match *admin_panel_state {
@@ -363,6 +392,7 @@ fn admin_panel(ui: &mut conrod::UiCell,
                             persons[0].password = (*new_password).clone().to_string();
                             println!("Password changed, now, admin have password: <{}>", persons[0].password);
                             *change_status = "Pasword changed succesfully".to_string();
+                            save_to_file(persons);
                         } else {
                             println!("old password incorrect");
                             *change_status = "Old password incorrect".to_string();
@@ -401,7 +431,7 @@ fn admin_panel(ui: &mut conrod::UiCell,
 
         },
         AdminPanelState::add_new_user => {
-            
+
             widget::Text::new("Etnter name for new user")
                 .color(color::LIGHT_RED)
                 .top_left_with_margin_on(ids.right_col, 20.0)
@@ -447,8 +477,107 @@ fn admin_panel(ui: &mut conrod::UiCell,
     }
 }
 
-fn user_panel() {
+fn user_panel(ui: &mut conrod::UiCell,
+              ids: &mut Ids,
+              persons: &mut Vec<Person>,
+              old_password: &mut String,
+              new_password: &mut String,
+              change_status: &mut String,
+              state: &mut State, 
+              user_index: usize)
+{
+    use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
+    use conrod::{color, widget, Colorable, Borderable, Labelable, Positionable, Sizeable, Widget};
+    use conrod::widget::{Canvas, Line};
 
+    widget::Canvas::new().flow_right(&[
+                                     (ids.left_col, widget::Canvas::new().color(color::BLACK).length_weight(1.0)),
+                                     (ids.right_col, widget::Canvas::new().color(color::DARK_CHARCOAL).length_weight(2.0)),
+                                     ]).set(ids.canvas, ui);
+
+    for event in widget::Button::new()
+        .mid_bottom_of(ids.left_col)
+            .w_h(150.0, 40.0)
+            .label("Exit to Login Menu")
+            .rgb(0.4, 0.4, 0.2)
+            .set(ids.exit_btn, ui) {
+                *state = State::login;
+            }
+
+
+    widget::Text::new("Enter old password: ")
+        .color(color::LIGHT_RED)
+        .top_left_with_margin_on(ids.right_col, 20.0)
+        .align_text_left()
+        .line_spacing(10.0)
+        .set(ids.text_not_found, ui); // don't care about id in this label
+
+    for event in widget::TextBox::new(old_password)
+        .down_from(ids.text_not_found, 20.0)
+            .font_size(20)
+            .w_h(320.0, 40.0)
+            .border(3.0)
+            .border_rgb(0.85, 0.43, 0.57)
+            .rgb(0.8, 0.75, 0.77)
+            .set(ids.login_field, ui) {
+                match event {
+                    widget::text_box::Event::Enter => println!("TextBox : {:?}", old_password),
+                    widget::text_box::Event::Update(string) => {
+                        println!("old_asspword update <{}>", string);
+                        *old_password = string;
+                    },
+                }
+            }
+
+    widget::Text::new("Enter new password: ")
+        .color(color::LIGHT_RED)
+        .down_from(ids.login_field, 20.0)
+        .align_text_left()
+        .line_spacing(10.0)
+        .set(ids.add_new_user, ui); // don't care about id in this label
+
+    for event in widget::TextBox::new(new_password)
+        .down_from(ids.add_new_user, 20.0)
+            .font_size(20)
+            .w_h(320.0, 40.0)
+            .border(3.0)
+            .border_rgb(0.85, 0.43, 0.57)
+            .rgb(0.8, 0.75, 0.77)
+            .set(ids.password_field, ui) {
+                match event {
+                    widget::text_box::Event::Enter => println!("TextBox : {:?}", new_password),
+                    widget::text_box::Event::Update(string) => {
+                        println!("new_password update <{}>", string);
+                        *new_password = string;
+                    },
+                }
+            }
+
+
+    // Add change btn
+    for event in widget::Button::new()
+        .down_from(ids.password_field, 20.0)
+            .w_h(150.0, 40.0)
+            .label("Change")
+            .rgb(0.4, 0.4, 0.2)
+            .set(ids.change_btn, ui) {
+                if *old_password.as_str() == persons[user_index].password {
+                    persons[user_index].password = (*new_password).clone().to_string();
+                    println!("Password changed, now <{}> have password: <{}>", persons[user_index].name, persons[user_index].password);
+                    *change_status = "Pasword changed succesfully".to_string();
+                    save_to_file(persons);
+                } else {
+                    println!("old password incorrect");
+                    *change_status = "Old password incorrect".to_string();
+                }
+            }
+
+    widget::Text::new(&*(*change_status))
+        .color(color::LIGHT_RED)
+        .down_from(ids.change_btn, 20.0)
+        .align_text_left()
+        .line_spacing(10.0)
+        .set(ids.change_status_text, ui); // don't care about id in this label
 }
 
 fn login_panel(ui: &mut conrod::UiCell, 
@@ -469,12 +598,9 @@ fn login_panel(ui: &mut conrod::UiCell,
         .pad_top(150.0)
         .rgb(1.0, 0.73, 1.0)
         .set(ids.canvas, ui);
-    //Line::centred([-40.0, -40.0], [40.0, 40.0]).top_left_of(ids.canvas).set(ids.circle, ui);
 
 
-    // Draw login filed
     for event in widget::TextBox::new(login)
-        //.and_if(true, |text| text.xy([1.0, 1.0]))
         .mid_top_of(ids.canvas)
             .font_size(20)
             .w_h(320.0, 40.0)
@@ -493,7 +619,6 @@ fn login_panel(ui: &mut conrod::UiCell,
 
     // Draw password field
     for event in widget::TextBox::new(password)
-        //.and_if(true, |text| text.xy([1.0, 1.0]))
         .down_from(ids.login_field, 20.0)
             .font_size(20)
             .w_h(320.0, 40.0)
@@ -510,14 +635,12 @@ fn login_panel(ui: &mut conrod::UiCell,
                 }
             }
 
-    if *is_incorrect {
-        widget::Text::new(err_msg)
-            .color(color::LIGHT_RED)
-            .padded_w_of(ids.password_field, 20.0)
-            .align_text_left()
-            .line_spacing(10.0)
-            .set(ids.text_not_found, ui);
-    }
+    widget::Text::new(err_msg)
+        .color(color::LIGHT_RED)
+        .padded_w_of(ids.password_field, 20.0)
+        .align_text_left()
+        .line_spacing(10.0)
+        .set(ids.text_not_found, ui);
 
     // Draw `Sign In` button
     for event in widget::Button::new()
