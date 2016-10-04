@@ -19,6 +19,7 @@ widget_ids! {
         add_new_user_btn,
         change_btn,
         change_status_text,
+        user_limit_list,
     }
 }
 
@@ -47,7 +48,7 @@ impl Person {
         Person {
             name: "".to_string(),
             password: "".to_string(),
-            blocked: true,
+            blocked: false,
             limit: false,
         }
     }
@@ -86,10 +87,19 @@ fn get_persons_from_file() -> Result<Vec<Person>, io::Error> {
         let line = line.unwrap();
         let mut words: Vec<&str> = line.split_whitespace().collect();
         if words.len() == 2 {
+
             // If this is an ADMIN
             let temp: Person = Person::new()
                 .name(words[0].to_string())
                 .password(words[1].to_string());
+            persons.push(temp);
+        } else if words.len() == 3 { 
+
+            // This is user without password
+            let mut temp: Person = Person::new()
+                .name(words[0].to_string())
+                .is_blocked(FromStr::from_str(words[1]).unwrap())
+                .is_limit(FromStr::from_str(words[2]).unwrap());
             persons.push(temp);
         } else {
             let mut temp: Person = Person::new()
@@ -99,6 +109,9 @@ fn get_persons_from_file() -> Result<Vec<Person>, io::Error> {
                 .is_limit(FromStr::from_str(words[3]).unwrap());
             persons.push(temp);
         }
+    }
+    for person in &persons {
+        println!("name = {}, pass = {}, is_blocked = {}, limit = {}", person.name, person.password, person.blocked, person.limit);
     }
     Ok(persons)
 }
@@ -172,6 +185,7 @@ fn main() {
     let old_password = &mut "".to_string();
     let new_password = &mut "".to_string();
     let change_status = &mut "".to_string();
+    let mut new_user_name = "".to_string();
 
 
     while let Some(event) = window.next() {
@@ -184,7 +198,7 @@ fn main() {
             let ui = &mut ui.set_widgets(); // UiCell
             match state {
                 State::login => login_panel(ui, &mut ids, &mut count, login, password, is_incorrect, is_login_pressed, &err_msg),
-                State::admin_panel => admin_panel(ui, &mut ids, &mut count, &mut persons, admin_panel_state, old_password, new_password, change_status),
+                State::admin_panel => admin_panel(ui, &mut ids, &mut count, &mut persons, admin_panel_state, old_password, new_password, change_status, &mut new_user_name),
                 _ => println!("Others"),
             }
 
@@ -243,7 +257,8 @@ fn admin_panel(ui: &mut conrod::UiCell,
                admin_panel_state: &mut AdminPanelState,
                old_password: &mut String,
                new_password: &mut String,
-               change_status: &mut String) 
+               change_status: &mut String,
+               new_user_name: &mut String) 
 {
     use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
     use conrod::{color, widget, Colorable, Borderable, Labelable, Positionable, Sizeable, Widget};
@@ -290,7 +305,7 @@ fn admin_panel(ui: &mut conrod::UiCell,
 
             widget::Text::new("Enter old password: ")
                 .color(color::LIGHT_RED)
-                .top_left_of(ids.right_col)
+                .top_left_with_margin_on(ids.right_col, 20.0)
                 .align_text_left()
                 .line_spacing(10.0)
                 .set(ids.text_not_found, ui); // don't care about id in this label
@@ -362,6 +377,8 @@ fn admin_panel(ui: &mut conrod::UiCell,
                 .set(ids.change_status_text, ui); // don't care about id in this label
         },
         AdminPanelState::list_users => {
+
+            // List for block/unblock access to program
             let (mut items, scrollbar) = widget::List::new(persons.len(), 50.0)
                 .scrollbar_on_top()
                 .middle_of(ids.right_col)
@@ -381,9 +398,50 @@ fn admin_panel(ui: &mut conrod::UiCell,
             }
 
             if let Some(s) = scrollbar { s.set(ui) }
+
         },
         AdminPanelState::add_new_user => {
+            
+            widget::Text::new("Etnter name for new user")
+                .color(color::LIGHT_RED)
+                .top_left_with_margin_on(ids.right_col, 20.0)
+                .align_text_left()
+                .line_spacing(10.0)
+                .set(ids.text_not_found, ui); // don't care about id in this label
 
+            for event in widget::TextBox::new(new_user_name)
+                .down_from(ids.text_not_found, 20.0)
+                    .font_size(20)
+                    .w_h(320.0, 40.0)
+                    .border(3.0)
+                    .border_rgb(0.85, 0.43, 0.57)
+                    .rgb(0.8, 0.75, 0.77)
+                    .set(ids.password_field, ui) {
+                        match event {
+                            widget::text_box::Event::Enter => println!("TextBox : {:?}", old_password),
+                            widget::text_box::Event::Update(string) => {
+                                println!("old_asspword update <{}>", string);
+                                *new_user_name = string;
+                            },
+                        }
+                    }
+            // Add change btn
+            for event in widget::Button::new()
+                .down_from(ids.password_field, 20.0)
+                    .w_h(150.0, 40.0)
+                    .label("Add")
+                    .rgb(0.4, 0.4, 0.2)
+                    .set(ids.change_btn, ui) {
+
+                        let temp: Person = Person::new()
+                            .name((*new_user_name).to_string());
+                        persons.push(temp);
+                        println!("persons now:");
+                        for person in &(*persons) {
+                            println!("name = {}, pass = {}, is_blocked = {}, limit = {}", person.name, person.password, person.blocked, person.limit);
+                        }
+                        save_to_file(persons);
+                    }
         },
         AdminPanelState::none => {},
     }
@@ -472,8 +530,79 @@ fn login_panel(ui: &mut conrod::UiCell,
             }
 }
 
+fn save_to_file(persons: &Vec<Person>) -> Result<(), io::Error> {
+    use std::fs::File;
+    use std::fs::remove_file;
+    use std::io::Write;
+    use std::clone::Clone;
 
+    try!(remove_file("resource/userlist.txt"));
 
+    let mut f = try!(File::create("resource/userlist.txt"));
+
+    let mut line = String::new();
+
+    for person in persons {
+        if person.name == "ADMIN" { // Means admin
+            line.clear();
+            line.push_str(person.name.as_str());
+            line.push(' ');
+            line.push_str(person.password.as_str());
+            line.push('\n');
+        } else if person.password == "" {  // Means new user
+            line.clear();
+            line.push_str(person.name.as_str());
+            line.push(' ');
+
+            match person.blocked {
+                true => {
+                    line.push_str("true");
+                    line.push(' ');
+                },
+                false => {
+                    line.push_str("false");
+                    line.push(' ');
+                },
+            }
+            match person.limit {
+                true => {
+                    line.push_str("true\n");
+                },
+                false => {
+                    line.push_str("false\n");
+                },
+            }
+
+        } else { // Means user
+            line.clear();
+            line.push_str(person.name.as_str());
+            line.push(' ');
+            line.push_str(person.password.as_str());
+            line.push(' ');
+
+            match person.blocked {
+                true => {
+                    line.push_str("true");
+                    line.push(' ');
+                },
+                false => {
+                    line.push_str("false");
+                    line.push(' ');
+                },
+            }
+            match person.limit {
+                true => {
+                    line.push_str("true\n");
+                },
+                false => {
+                    line.push_str("false\n");
+                },
+            }
+        }
+        try!(f.write_all(line.clone().into_bytes().as_slice()));
+    }
+    Ok(())
+}
 
 
 
